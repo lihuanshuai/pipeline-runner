@@ -1,0 +1,29 @@
+name: hello
+description: minimal pipeline-runner example
+
+cli:
+  arguments:
+    - name: name
+      type: str
+      required: true
+      help: name to greet
+
+workflow:
+  entry: greet
+  nodes:
+    - name: greet
+      type: command
+      command:
+        - python
+        - -c
+        - "import json; print(json.dumps(dict(message='hello {name}')))"
+      shell: false
+      outputs:
+        - message
+    - name: show
+      type: print
+      keys:
+        - message
+  edges:
+    - from: greet
+      to: show
