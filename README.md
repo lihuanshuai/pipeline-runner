@@ -5,7 +5,7 @@
 ## 特性
 
 - 使用 YAML 描述 pipeline，适合脚本编排、数据处理、媒体处理、批任务串联。
-- 内置 `command`、`tool`、`python`、`set`、`print` 节点。
+- 内置 `command`、`shell`、`python`、`set`、`print` 节点。
 - 支持 `{var}` 模板、条件边、节点跳过、JSON stdout 自动解析。
 - 提供命令行脚本：`pipeline-runner`。
 - 代码小、依赖少，核心只有 `pyyaml`。
@@ -43,7 +43,10 @@ workflow:
   nodes:
     - name: greet
       type: command
-      command: "python -c \"import json; print(json.dumps(dict(message='hello {name}')))\""
+      exec: python
+      args:
+        - -c
+        - "import json; print(json.dumps(dict(message='hello {name}')))"
       outputs: [message]
     - name: show
       type: print
@@ -74,25 +77,25 @@ uv run pipeline-runner run examples/pipelines/hello.yaml --name Jerry
 
 ### 节点类型
 
-`command`：执行一条命令。stdout 如果是 JSON object，会自动作为节点结果。
+`command`：执行一个可执行文件，参数通过 `args` 传入；`exec` 和 `args` 都支持 `{var}` 变量替换。stdout 如果是 JSON object，会自动作为节点结果。
 
 ```yaml
 - name: list
   type: command
-  command: ["python", "-c", "print('{\"ok\": true}')"]
-  shell: false
-  outputs: [ok]
+  exec: python
+  args:
+    - -c
+    - "import json; print(json.dumps(dict(input='{input_path}')))"
+  outputs: [input]
 ```
 
-`tool`：调用外部工具，会把 `inputs` 转为 `--key value` 参数。
+`shell`：通过平台默认 shell 执行一段命令字符串，适合使用管道、重定向或 shell 内置语法。
 
 ```yaml
-- name: parse
-  type: tool
-  tool: parse-media
-  inputs:
-    input: "{input_path}"
-  outputs: [duration, codec]
+- name: echo
+  type: shell
+  command: "echo {message}"
+  outputs: [output]
 ```
 
 `python`：调用 Python 函数，函数返回 dict 时会作为结果。
@@ -101,7 +104,7 @@ uv run pipeline-runner run examples/pipelines/hello.yaml --name Jerry
 - name: prepare
   type: python
   function: "my_project.pipeline.prepare_output"
-  inputs:
+  args:
     output_dir: "{output_dir}"
     uid: "{uid}"
   outputs: [output_path]

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import yaml
+
+NodeType = Literal["command", "shell", "python", "set", "print"]
+
+_NODE_TYPES: frozenset[str] = frozenset(get_args(NodeType))
 
 
 def load_pipeline(path: str | Path) -> dict[str, Any]:
@@ -35,6 +39,9 @@ def validate_pipeline(config: dict[str, Any]) -> None:
         name = node.get("name")
         if not isinstance(name, str) or not name:
             raise ValueError(f"Node #{index} name must be a non-empty string.")
+        node_type = node.get("type", "command")
+        if node_type not in _NODE_TYPES:
+            raise ValueError(f"Node {name} has unsupported type: {node_type}")
         if name in node_names:
             raise ValueError(f"Duplicate node name: {name}")
         node_names.add(name)

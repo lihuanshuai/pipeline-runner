@@ -13,11 +13,10 @@ workflow:
   nodes:
     - name: greet
       type: command
-      command:
-        - python
+      exec: python
+      args:
         - -c
         - "import json; print(json.dumps(dict(message='hello {name}')))"
-      shell: false
       outputs:
         - message
     - name: show

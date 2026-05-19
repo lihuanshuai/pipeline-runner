@@ -17,8 +17,8 @@ def execute_node(node: dict[str, Any], state: PipelineState) -> StepResult:
     node_type = node.get("type", "command")
     if node_type == "command":
         return _execute_command(node, state)
-    if node_type == "tool":
-        return _execute_tool(node, state)
+    if node_type == "shell":
+        return _execute_shell(node, state)
     if node_type == "python":
         return _execute_python(node, state)
     if node_type == "set":
@@ -30,14 +30,25 @@ def execute_node(node: dict[str, Any], state: PipelineState) -> StepResult:
 
 def _execute_command(node: dict[str, Any], state: PipelineState) -> StepResult:
     context = state.as_context()
-    command = render(node.get("command"), context)
-    if not command:
-        raise ValueError(f"Node {node['name']} is missing command.")
-    if isinstance(command, list):
-        command = [str(part) for part in command]
+    executable = render(node.get("exec"), context)
+    if not executable:
+        raise ValueError(f"Node {node['name']} is missing exec.")
+    args = render(node.get("args", []), context)
+    if not isinstance(args, list):
+        raise ValueError(f"Node {node['name']} args must be a list.")
+    command = [str(executable), *[str(part) for part in args]]
 
-    shell = bool(node.get("shell", isinstance(command, str)))
-    timeout = int(node.get("timeout", 300))
+    return _run_process(command, bool(node.get("shell", False)), int(node.get("timeout", 300)))
+
+
+def _execute_shell(node: dict[str, Any], state: PipelineState) -> StepResult:
+    command = render(node.get("command"), state.as_context())
+    if not isinstance(command, str) or not command:
+        raise ValueError(f"Node {node['name']} is missing command.")
+    return _run_process(command, True, int(node.get("timeout", 300)))
+
+
+def _run_process(command: str | list[str], shell: bool, timeout: int) -> StepResult:
     result = subprocess.run(
         command,
         capture_output=True,
@@ -57,22 +68,15 @@ def _execute_command(node: dict[str, Any], state: PipelineState) -> StepResult:
     )
 
 
-def _execute_tool(node: dict[str, Any], state: PipelineState) -> StepResult:
-    context = state.as_context()
-    command = [render(node["tool"], context)]
-    for key, value in render(node.get("inputs", {}), context).items():
-        command.extend([f"--{key}", str(value)])
-    node = {**node, "command": command, "shell": False}
-    return _execute_command(node, state)
-
-
 def _execute_python(node: dict[str, Any], state: PipelineState) -> StepResult:
     function_path = node.get("function")
     if not function_path or "." not in function_path:
         raise ValueError(f"Node {node['name']} has invalid function path.")
     module_name, function_name = function_path.rsplit(".", 1)
     function: Callable[..., Any] = getattr(importlib.import_module(module_name), function_name)
-    kwargs = render(node.get("inputs", {}), state.as_context())
+    kwargs = render(node.get("args", {}), state.as_context())
+    if not isinstance(kwargs, dict):
+        raise ValueError(f"Node {node['name']} args must be a mapping.")
     result = function(**kwargs)
     data = result if isinstance(result, dict) else {"result": result}
     return StepResult(data=data)
